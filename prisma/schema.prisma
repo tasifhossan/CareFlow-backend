@@ -1,0 +1,193 @@
+// Architecture Notes:
+//
+// 1. Multi-Tenancy Design:
+//    CareFlow employs a row-level multi-tenancy model using a required `organizationId` foreign key 
+//    on every tenant-owned model. This pattern ensures strict data isolation across healthcare organizations,
+//    enables efficient tenant-scoped database queries via `@@index([organizationId])`, and simplifies 
+//    organization offboarding through cascading deletes (`onDelete: Cascade`).
+//
+// 2. Storage Reference Design (MedicalDocument):
+//    `MedicalDocument` stores metadata and Cloudinary assets references (`cloudinaryUrl`, `cloudinaryPublicId`, `fileType`)
+//    rather than raw binary content. Decoupling file storage offloads heavy blob payloads to a specialized CDN,
+//    ensures ultra-fast global media delivery, minimizes relational database size, and improves database query performance.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  ORG_ADMIN
+  DOCTOR
+  RECEPTIONIST
+  STAFF
+  PATIENT
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CHECKED_IN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users            User[]
+  departments      Department[]
+  doctors          Doctor[]
+  patients         Patient[]
+  appointments     Appointment[]
+  medicalDocuments MedicalDocument[]
+  auditLogs        AuditLog[]
+}
+
+model User {
+  id             String   @id @default(cuid())
+  organizationId String
+  email          String
+  passwordHash   String
+  name           String
+  role           Role
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  refreshTokens     RefreshToken[]
+  doctor            Doctor?
+  patient           Patient?
+  uploadedDocuments MedicalDocument[]
+  auditLogs         AuditLog[]
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Department {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  doctors      Doctor[]
+
+  @@index([organizationId])
+}
+
+model Doctor {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  organizationId String
+  departmentId   String
+  specialization String
+  createdAt      DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  department   Department   @relation(fields: [departmentId], references: [id])
+  appointments Appointment[]
+
+  @@index([organizationId])
+  @@index([departmentId])
+}
+
+model Patient {
+  id             String   @id @default(cuid())
+  userId         String?  @unique
+  organizationId String
+  fullName       String
+  dateOfBirth    DateTime
+  bloodGroup     String?
+  phone          String
+  createdAt      DateTime @default(now())
+
+  user             User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  appointments     Appointment[]
+  medicalDocuments MedicalDocument[]
+
+  @@index([organizationId])
+}
+
+model Appointment {
+  id              String            @id @default(cuid())
+  organizationId  String
+  patientId       String
+  doctorId        String
+  scheduledAt     DateTime
+  durationMinutes Int
+  status          AppointmentStatus
+  reason          String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  patient      Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor       Doctor       @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([patientId])
+  @@index([doctorId])
+}
+
+model MedicalDocument {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  patientId          String
+  cloudinaryUrl      String
+  cloudinaryPublicId String   @unique
+  fileType           String
+  uploadedByUserId   String
+  createdAt          DateTime @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  patient        Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  uploadedByUser User         @relation(fields: [uploadedByUserId], references: [id])
+
+  @@index([organizationId])
+  @@index([patientId])
+  @@index([uploadedByUserId])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  action         String
+  resourceType   String
+  resourceId     String
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@index([organizationId])
+  @@index([userId])
+}
