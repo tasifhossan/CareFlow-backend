@@ -1,2 +1,1 @@
-// Service module placeholders for domain logic
-export {};
+export * from './auth.service';
