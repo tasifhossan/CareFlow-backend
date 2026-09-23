@@ -26,3 +26,11 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     next(error);
   }
 };
+
+export const getMe = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    res.status(200).json(req.user);
+  } catch (error) {
+    next(error);
+  }
+};
