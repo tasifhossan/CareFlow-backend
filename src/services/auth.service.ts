@@ -1,8 +1,9 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { hashPassword } from '../lib/hash';
+import { comparePassword, hashPassword, hashToken } from '../lib/hash';
+import { signAccessToken, signRefreshToken } from '../lib/jwt';
 import { AppError } from '../middleware/errorHandler';
-import { RegisterInput } from '../validators/auth.validator';
+import { LoginInput, RegisterInput } from '../validators/auth.validator';
 
 export const registerUser = async (input: RegisterInput) => {
   const organizationExists = await prisma.organization.findUnique({
@@ -39,4 +40,51 @@ export const registerUser = async (input: RegisterInput) => {
     }
     throw error;
   }
+};
+
+export const loginUser = async (input: LoginInput) => {
+  const normalizedEmail = input.email.toLowerCase().trim();
+
+  const user = await prisma.user.findUnique({
+    where: {
+      organizationId_email: {
+        organizationId: input.organizationId,
+        email: normalizedEmail,
+      },
+    },
+  });
+
+  if (!user) {
+    throw new AppError('Invalid email or password', 401, 'INVALID_CREDENTIALS');
+  }
+
+  const isPasswordValid = await comparePassword(input.password, user.passwordHash);
+  if (!isPasswordValid) {
+    throw new AppError('Invalid email or password', 401, 'INVALID_CREDENTIALS');
+  }
+
+  const payload = {
+    userId: user.id,
+    organizationId: user.organizationId,
+    role: user.role,
+  };
+
+  const accessToken = signAccessToken(payload);
+  const refreshToken = signRefreshToken(payload);
+
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const tokenHash = hashToken(refreshToken);
+
+  await prisma.refreshToken.create({
+    data: {
+      userId: user.id,
+      tokenHash,
+      expiresAt,
+    },
+  });
+
+  return {
+    accessToken,
+    refreshToken,
+  };
 };
