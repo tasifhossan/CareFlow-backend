@@ -1,9 +1,9 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { comparePassword, hashPassword, hashToken } from '../lib/hash';
-import { signAccessToken, signRefreshToken } from '../lib/jwt';
+import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../lib/jwt';
 import { AppError } from '../middleware/errorHandler';
-import { LoginInput, RegisterInput } from '../validators/auth.validator';
+import { LoginInput, LogoutInput, RefreshInput, RegisterInput } from '../validators/auth.validator';
 
 export const registerUser = async (input: RegisterInput) => {
   const organizationExists = await prisma.organization.findUnique({
@@ -87,4 +87,77 @@ export const loginUser = async (input: LoginInput) => {
     accessToken,
     refreshToken,
   };
+};
+
+export const refreshTokens = async (input: RefreshInput) => {
+  let payload;
+  try {
+    payload = verifyRefreshToken(input.refreshToken);
+  } catch (error) {
+    throw new AppError('Invalid or expired refresh token', 401, 'UNAUTHORIZED');
+  }
+
+  const incomingHash = hashToken(input.refreshToken);
+
+  const storedToken = await prisma.refreshToken.findUnique({
+    where: { tokenHash: incomingHash },
+  });
+
+  if (!storedToken) {
+    throw new AppError('Invalid or revoked refresh token', 401, 'UNAUTHORIZED');
+  }
+
+  if (storedToken.revokedAt !== null) {
+    throw new AppError('Refresh token has been revoked', 401, 'UNAUTHORIZED');
+  }
+
+  if (storedToken.expiresAt < new Date()) {
+    throw new AppError('Refresh token has expired', 401, 'UNAUTHORIZED');
+  }
+
+  const newPayload = {
+    userId: payload.userId,
+    organizationId: payload.organizationId,
+    role: payload.role,
+  };
+
+  const newAccessToken = signAccessToken(newPayload);
+  const newRefreshToken = signRefreshToken(newPayload);
+
+  const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const newTokenHash = hashToken(newRefreshToken);
+
+  await prisma.$transaction([
+    prisma.refreshToken.update({
+      where: { id: storedToken.id },
+      data: { revokedAt: new Date() },
+    }),
+    prisma.refreshToken.create({
+      data: {
+        userId: payload.userId,
+        tokenHash: newTokenHash,
+        expiresAt: newExpiresAt,
+      },
+    }),
+  ]);
+
+  return {
+    accessToken: newAccessToken,
+    refreshToken: newRefreshToken,
+  };
+};
+
+export const logoutUser = async (input: LogoutInput): Promise<void> => {
+  const incomingHash = hashToken(input.refreshToken);
+
+  const storedToken = await prisma.refreshToken.findUnique({
+    where: { tokenHash: incomingHash },
+  });
+
+  if (storedToken && storedToken.revokedAt === null) {
+    await prisma.refreshToken.update({
+      where: { id: storedToken.id },
+      data: { revokedAt: new Date() },
+    });
+  }
 };
