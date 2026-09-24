@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma';
 import { comparePassword, hashPassword, hashToken } from '../lib/hash';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../lib/jwt';
 import { AppError } from '../middleware/errorHandler';
-import { LoginInput, RefreshInput, RegisterInput } from '../validators/auth.validator';
+import { LoginInput, LogoutInput, RefreshInput, RegisterInput } from '../validators/auth.validator';
 
 export const registerUser = async (input: RegisterInput) => {
   const organizationExists = await prisma.organization.findUnique({
@@ -145,4 +145,19 @@ export const refreshTokens = async (input: RefreshInput) => {
     accessToken: newAccessToken,
     refreshToken: newRefreshToken,
   };
+};
+
+export const logoutUser = async (input: LogoutInput): Promise<void> => {
+  const incomingHash = hashToken(input.refreshToken);
+
+  const storedToken = await prisma.refreshToken.findUnique({
+    where: { tokenHash: incomingHash },
+  });
+
+  if (storedToken && storedToken.revokedAt === null) {
+    await prisma.refreshToken.update({
+      where: { id: storedToken.id },
+      data: { revokedAt: new Date() },
+    });
+  }
 };
