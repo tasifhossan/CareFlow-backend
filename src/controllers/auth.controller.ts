@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { loginSchema, registerSchema } from '../validators/auth.validator';
-import { loginUser, registerUser } from '../services/auth.service';
+import { loginSchema, refreshSchema, registerSchema } from '../validators/auth.validator';
+import { loginUser, refreshTokens, registerUser } from '../services/auth.service';
 
 export const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
@@ -20,6 +20,17 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
   try {
     const validatedInput = loginSchema.parse(req.body);
     const tokens = await loginUser(validatedInput);
+
+    res.status(200).json(tokens);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const refresh = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const validatedInput = refreshSchema.parse(req.body);
+    const tokens = await refreshTokens(validatedInput);
 
     res.status(200).json(tokens);
   } catch (error) {

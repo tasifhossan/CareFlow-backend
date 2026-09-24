@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 
 export interface JwtPayload {
@@ -27,7 +28,9 @@ export const signAccessToken = (payload: JwtPayload): string => {
 };
 
 export const signRefreshToken = (payload: JwtPayload): string => {
-  return jwt.sign(payload, getRefreshSecret(), { expiresIn: '7d' });
+  return jwt.sign({ ...payload, jti: crypto.randomUUID() }, getRefreshSecret(), {
+    expiresIn: '7d',
+  });
 };
 
 export const verifyAccessToken = (token: string): JwtPayload => {
