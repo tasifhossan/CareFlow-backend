@@ -30,4 +30,7 @@ jobs:
         run: npm run typecheck
 
       - name: Run tests
+        env:
+          JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET_TEST }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET_TEST }}
         run: npm run test

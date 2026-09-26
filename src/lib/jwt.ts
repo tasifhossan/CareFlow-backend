@@ -8,11 +8,19 @@ export interface JwtPayload {
 }
 
 const getAccessSecret = (): string => {
-  return process.env.JWT_ACCESS_SECRET || 'default_jwt_access_secret_for_development_and_testing';
+  const secret = process.env.JWT_ACCESS_SECRET;
+  if (!secret) {
+    throw new Error('JWT_ACCESS_SECRET environment variable is not defined.');
+  }
+  return secret;
 };
 
 const getRefreshSecret = (): string => {
-  return process.env.JWT_REFRESH_SECRET || 'default_jwt_refresh_secret_for_development_and_testing';
+  const secret = process.env.JWT_REFRESH_SECRET;
+  if (!secret) {
+    throw new Error('JWT_REFRESH_SECRET environment variable is not defined.');
+  }
+  return secret;
 };
 
 export const signAccessToken = (payload: JwtPayload): string => {
