@@ -61,3 +61,7 @@ src/
 - `npm run lint`: Run ESLint checks
 - `npm run typecheck`: Run TypeScript type check (`tsc --noEmit`)
 - `npm run test`: Run test suite
+
+## CI Setup
+
+Before CI will pass, the repo owner needs to add `JWT_ACCESS_SECRET_TEST` and `JWT_REFRESH_SECRET_TEST` as GitHub Actions repository secrets (**Settings** → **Secrets and variables** → **Actions**), with any random string value — these are test-only, never real secrets.
