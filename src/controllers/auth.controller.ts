@@ -61,3 +61,15 @@ export const getMe = async (req: Request, res: Response, next: NextFunction): Pr
     next(error);
   }
 };
+
+export const getAdminOnly = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    res.status(200).json({ message: 'You have admin access' });
+  } catch (error) {
+    next(error);
+  }
+};
